@@ -23,6 +23,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const QRCode = require('qrcode');
 
 const bot = require('./bot');
 
@@ -181,6 +182,84 @@ app.post('/api/command', wrap(async (req, res) => {
   const result = bot.handleCommand(command);
   res.json(result);
 }));
+
+// ===========================================================================
+// QR helpers — let the user scan from a laptop browser instead of fighting
+// Android's app switcher on the phone running Termux.
+// ===========================================================================
+app.get('/api/qr', wrap(async (_req, res) => {
+  const raw = bot.getCurrentQR();
+  const status = bot.getStatus();
+  if (!raw) return res.json({ qr: null, ready: !!status.ready });
+  const dataUrl = await QRCode.toDataURL(raw, { scale: 8, margin: 2 });
+  res.json({ qr: dataUrl, ready: false });
+}));
+
+app.get('/qr', (_req, res) => {
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Friday — Link WhatsApp</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; min-height: 100vh; background: #0d1117; color: #e6edf3;
+           font-family: system-ui, sans-serif; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; padding: 24px; gap: 18px; }
+    h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+    p  { margin: 0; opacity: 0.75; font-size: 0.9rem; text-align: center; max-width: 360px; }
+    #card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    #qr { display: block; width: min(72vw, 320px); height: auto; }
+    #empty { width: min(72vw, 320px); aspect-ratio: 1; background: #161b22;
+             border: 1px dashed #30363d; border-radius: 16px; display: flex;
+             align-items: center; justify-content: center; color: #7d8590; font-size: 0.9rem; }
+    #status { font-size: 0.85rem; opacity: 0.65; }
+    #status.ok { color: #3fb950; opacity: 1; }
+    .pulse { animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body>
+  <h1>Link Friday to WhatsApp</h1>
+  <p>On your phone, open <b>WhatsApp → Settings → Linked Devices → Link a Device</b> and scan this code.</p>
+  <div id="card"><img id="qr" alt="QR" hidden></div>
+  <div id="empty" class="pulse">waiting for QR…</div>
+  <p id="status">connecting…</p>
+  <script>
+    const img = document.getElementById('qr');
+    const empty = document.getElementById('empty');
+    const status = document.getElementById('status');
+    async function tick() {
+      try {
+        const r = await fetch('/api/qr', { cache: 'no-store' });
+        const data = await r.json();
+        if (data.ready) {
+          img.hidden = true;
+          empty.style.display = 'none';
+          status.textContent = '✓ Friday is linked and ready';
+          status.classList.add('ok');
+        } else if (data.qr) {
+          img.src = data.qr;
+          img.hidden = false;
+          empty.style.display = 'none';
+          status.textContent = 'QR refreshes automatically — scan within ~20 seconds';
+          status.classList.remove('ok');
+        } else {
+          img.hidden = true;
+          empty.style.display = 'flex';
+          status.textContent = 'waiting for WhatsApp Web…';
+        }
+      } catch (e) {
+        status.textContent = 'lost connection to Friday — retrying…';
+      }
+    }
+    tick();
+    setInterval(tick, 2000);
+  </script>
+</body>
+</html>`);
+});
 
 // ===========================================================================
 // 404 for unknown /api/*

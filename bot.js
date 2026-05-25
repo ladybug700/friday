@@ -63,6 +63,7 @@ let _killSwitch = false;
 let _broadcast = () => {};          // installed by server via setBroadcast()
 let _waReady = false;
 let _client = null;
+let _currentQR = null;              // latest QR string from puppeteer; null when ready
 
 // === Persistence ==========================================================
 function ensureDataDir() {
@@ -275,7 +276,9 @@ function startClient() {
   });
 
   _client.on('qr', (qr) => {
-    console.log('[wa] scan QR below to link Friday:');
+    _currentQR = qr;
+    console.log('[wa] new QR — scan in WhatsApp → Linked Devices, OR open');
+    console.log('[wa] http://<phone-ip>:' + (process.env.PORT || 3000) + '/qr on another device.');
     qrcode.generate(qr, { small: true });
     safeBroadcast({ type: 'status', payload: { connected: false, qr: true } });
   });
@@ -292,6 +295,7 @@ function startClient() {
 
   _client.on('ready', () => {
     _waReady = true;
+    _currentQR = null;
     console.log('[wa] client ready');
     safeBroadcast({ type: 'connected', payload: { connected: true } });
     safeBroadcast({ type: 'status', payload: { connected: true, killSwitch: _killSwitch } });
@@ -574,4 +578,7 @@ module.exports = {
   groups,
   history,
   saveData,
+  // status getters used by /qr and /api/qr
+  getCurrentQR: () => _currentQR,
+  getStatus: () => ({ ready: _waReady, killSwitch: _killSwitch }),
 };
