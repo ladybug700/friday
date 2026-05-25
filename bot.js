@@ -37,8 +37,10 @@ const CHROMIUM_PATH =
 const OPENCODE_URL = 'https://opencode.ai/zen/v1/chat/completions';
 const OPENCODE_API_KEY =
   process.env.OPENCODE_API_KEY || 'YOUR_OPENCODE_API_KEY_HERE';
-const PRIMARY_MODEL = 'minimax/m2.5-free';
-const FALLBACK_MODEL = 'moonshot/kimi-k2.5';
+// Models can be overridden via env if OpenCode renames the slug.
+// On OpenCode AI, Anthropic models are exposed as `anthropic/<model>`.
+const PRIMARY_MODEL = process.env.PRIMARY_MODEL || 'anthropic/claude-haiku-4.5';
+const FALLBACK_MODEL = process.env.FALLBACK_MODEL || 'moonshot/kimi-k2.5';
 
 const MAX_HISTORY = 500;            // history.json ring buffer cap
 const MAX_CONVO_TURNS = 8;          // turns kept per contact for AI context

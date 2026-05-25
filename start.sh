@@ -26,7 +26,10 @@ mkdir -p "$HOME/whatsapp-bot/data"
 
 if [ "$OPENCODE_API_KEY" = "YOUR_OPENCODE_API_KEY_HERE" ]; then
   echo "[start.sh] WARNING: OPENCODE_API_KEY is not set. AI replies will fail."
-  echo "[start.sh]          export OPENCODE_API_KEY=\"sk-...\" before re-running."
+  echo "[start.sh]          export OPENCODE_API_KEY=\"ksk-...\" before re-running."
 fi
+
+echo "[start.sh] primary model:  ${PRIMARY_MODEL:-anthropic/claude-haiku-4.5}"
+echo "[start.sh] fallback model: ${FALLBACK_MODEL:-moonshot/kimi-k2.5}"
 
 exec node server.js
