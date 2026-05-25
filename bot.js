@@ -18,12 +18,15 @@
 //   WS payloads: { type, payload } where type ∈
 //     pending | sent | log | alert | status | connected
 //   Pending object on the wire MUST use the field name `pendingId`.
+//
+// AI provider: Ollama Cloud (https://ollama.com), official `ollama` JS SDK.
 // ---------------------------------------------------------------------------
 
 const fs = require('fs');
 const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const { Ollama } = require('ollama');
 
 // === Configuration ========================================================
 const HOME = process.env.HOME || '/data/data/com.termux/files/home';
@@ -34,13 +37,14 @@ const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   '/data/data/com.termux/files/usr/bin/chromium-browser';
 
-const OPENCODE_URL = 'https://opencode.ai/zen/v1/chat/completions';
-const OPENCODE_API_KEY =
-  process.env.OPENCODE_API_KEY || 'YOUR_OPENCODE_API_KEY_HERE';
-// Models can be overridden via env if OpenCode renames the slug.
-// On OpenCode AI, Anthropic models are exposed as `anthropic/<model>`.
-const PRIMARY_MODEL = process.env.PRIMARY_MODEL || 'anthropic/claude-haiku-4.5';
-const FALLBACK_MODEL = process.env.FALLBACK_MODEL || 'moonshot/kimi-k2.5';
+// Ollama Cloud — official JS SDK posts to `${host}/api/chat`.
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'https://ollama.com';
+const OLLAMA_API_KEY =
+  process.env.OLLAMA_API_KEY || 'YOUR_OLLAMA_API_KEY_HERE';
+// Both overridable via env if Ollama renames a slug.
+const PRIMARY_MODEL = process.env.PRIMARY_MODEL || 'gemma4:31b-cloud';
+const FALLBACK_MODEL = process.env.FALLBACK_MODEL || 'gpt-oss:120b';
+const AI_RETRIES_PER_MODEL = 1;     // initial try + 1 retry per model
 
 const MAX_HISTORY = 500;            // history.json ring buffer cap
 const MAX_CONVO_TURNS = 8;          // turns kept per contact for AI context
@@ -207,46 +211,44 @@ function systemPromptFor(voice, engagement, contactName) {
   ].join('\n');
 }
 
+// Singleton Ollama Cloud client. The auth header is also passed per-request,
+// so a freshly-rotated OLLAMA_API_KEY takes effect on the next message
+// without restarting the bot — re-read the env at call time.
+const ollama = new Ollama({
+  host: OLLAMA_HOST,
+  headers: { Authorization: `Bearer ${OLLAMA_API_KEY}` },
+});
+
+async function callOllamaOnce(model, messages) {
+  const key = process.env.OLLAMA_API_KEY || OLLAMA_API_KEY;
+  const res = await ollama.chat({
+    model,
+    messages,
+    stream: false,
+    options: { temperature: 0.7 },
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  const reply = res?.message?.content?.trim();
+  if (!reply) throw new Error('empty content from model');
+  return reply;
+}
+
 async function askAI(messages, contactName) {
-  if (typeof fetch !== 'function') {
-    throw new Error('global fetch unavailable — please run on Node 18+');
-  }
   const errors = [];
   for (const model of [PRIMARY_MODEL, FALLBACK_MODEL]) {
-    try {
-      const res = await fetch(OPENCODE_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENCODE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: 0.7,
-          max_tokens: 400,
-        }),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        const msg = `${model} HTTP ${res.status}: ${txt.slice(0, 200)}`;
+    for (let attempt = 0; attempt <= AI_RETRIES_PER_MODEL; attempt++) {
+      try {
+        const reply = await callOllamaOnce(model, messages);
+        console.log(
+          `[bot] AI reply via ${model} for ${contactName} ` +
+          `(${reply.length} chars${attempt ? `, retry ${attempt}` : ''})`,
+        );
+        return reply;
+      } catch (e) {
+        const msg = `${model} attempt ${attempt + 1}: ${e.message || e}`;
         console.error(`[bot] AI ${msg}`);
         errors.push(msg);
-        continue;
       }
-      const data = await res.json();
-      const reply = data?.choices?.[0]?.message?.content?.trim();
-      if (reply) {
-        console.log(`[bot] AI reply via ${model} for ${contactName} (${reply.length} chars)`);
-        return reply;
-      }
-      const msg = `${model} returned empty content`;
-      console.error(`[bot] AI ${msg}`);
-      errors.push(msg);
-    } catch (e) {
-      const msg = `${model} threw: ${e.message}`;
-      console.error(`[bot] AI ${msg}`);
-      errors.push(msg);
     }
   }
   throw new Error('AI unavailable — ' + errors.join(' | '));
@@ -554,9 +556,6 @@ function handleCommand(rawCmd) {
       };
   }
 }
-
-// === setBroadcast convenience for /api/setBroadcast-style hooks ===========
-// (kept here only so server.js can also import it as a named export if desired)
 
 // === Init =================================================================
 loadData();

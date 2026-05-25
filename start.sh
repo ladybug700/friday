@@ -5,8 +5,8 @@
 #   pkg install nodejs git chromium
 #   cd ~/whatsapp-bot && npm install
 #
-# Set your OpenCode API key once in ~/.bashrc or before this script:
-#   export OPENCODE_API_KEY="sk-..."
+# Set your Ollama Cloud API key once in ~/.bashrc or before this script:
+#   export OLLAMA_API_KEY="..."
 #
 # Then just run:  bash start.sh
 
@@ -19,17 +19,19 @@ export PUPPETEER_EXECUTABLE_PATH="$CHROMIUM_PATH"
 export PUPPETEER_SKIP_DOWNLOAD=true
 
 # Sensible defaults — override in your environment if needed.
-export OPENCODE_API_KEY="${OPENCODE_API_KEY:-YOUR_OPENCODE_API_KEY_HERE}"
+export OLLAMA_API_KEY="${OLLAMA_API_KEY:-YOUR_OLLAMA_API_KEY_HERE}"
+export OLLAMA_HOST="${OLLAMA_HOST:-https://ollama.com}"
 export PORT="${PORT:-3000}"
 
 mkdir -p "$HOME/whatsapp-bot/data"
 
-if [ "$OPENCODE_API_KEY" = "YOUR_OPENCODE_API_KEY_HERE" ]; then
-  echo "[start.sh] WARNING: OPENCODE_API_KEY is not set. AI replies will fail."
-  echo "[start.sh]          export OPENCODE_API_KEY=\"ksk-...\" before re-running."
+if [ "$OLLAMA_API_KEY" = "YOUR_OLLAMA_API_KEY_HERE" ]; then
+  echo "[start.sh] WARNING: OLLAMA_API_KEY is not set. AI replies will fail."
+  echo "[start.sh]          export OLLAMA_API_KEY=\"...\" before re-running."
 fi
 
-echo "[start.sh] primary model:  ${PRIMARY_MODEL:-anthropic/claude-haiku-4.5}"
-echo "[start.sh] fallback model: ${FALLBACK_MODEL:-moonshot/kimi-k2.5}"
+echo "[start.sh] ollama host:    $OLLAMA_HOST"
+echo "[start.sh] primary model:  ${PRIMARY_MODEL:-gemma4:31b-cloud}"
+echo "[start.sh] fallback model: ${FALLBACK_MODEL:-gpt-oss:120b}"
 
 exec node server.js

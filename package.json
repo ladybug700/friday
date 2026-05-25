@@ -2,7 +2,7 @@
   "name": "friday",
   "version": "1.0.0",
   "private": true,
-  "description": "Friday — WhatsApp AI assistant (Termux + Node.js + whatsapp-web.js + OpenCode AI)",
+  "description": "Friday — WhatsApp AI assistant (Termux + Node.js + whatsapp-web.js + Ollama Cloud)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "express": "^4.19.2",
+    "ollama": "^0.5.9",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.23.0",
     "ws": "^8.18.0"
