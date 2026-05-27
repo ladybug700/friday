@@ -169,10 +169,33 @@ app.post('/api/groups/toggle', wrap(async (req, res) => {
 // ===========================================================================
 // API: kill / command
 // ===========================================================================
-app.post('/api/kill', wrap(async (_req, res) => {
-  // Toggle: read current and flip.
-  const next = bot.killSwitch(!bot.killSwitch());
+app.post('/api/kill', wrap(async (req, res) => {
+  // The dashboard sends this as a "shutdown all" intent.
+  // We accept an optional `enabled` flag so the dashboard or /api/command
+  // can explicitly set the state rather than toggling blindly.
+  const { enabled } = req.body || {};
+  let next;
+  if (typeof enabled === 'boolean') {
+    next = bot.killSwitch(enabled);
+  } else {
+    // Legacy toggle behaviour (dashboard sends empty body).
+    next = bot.killSwitch(!bot.killSwitch());
+  }
+  console.log(`[api] killSwitch now: ${next}`);
   res.json({ ok: true, killSwitch: next });
+}));
+
+// GET /api/status — used by the dashboard on load to sync kill state.
+app.get('/api/status', wrap(async (_req, res) => {
+  const status = bot.getStatus();
+  res.json({
+    connected: status.ready,
+    killSwitch: status.killSwitch,
+    pending: bot.pending.size,
+    contacts: bot.contacts.length,
+    groups: bot.groups.length,
+    history: bot.history.length,
+  });
 }));
 
 app.post('/api/command', wrap(async (req, res) => {
@@ -288,7 +311,17 @@ wss.on('connection', (ws, req) => {
 
   // Hydrate the new client with current state so the dashboard never starts blank.
   try {
+    const status = bot.getStatus();
+    // If kill switch is active, the dashboard needs to know immediately.
+    // The 'status' WS event carries { connected, killSwitch } — the dashboard
+    // handles this via SET_CONNECTED. But the dashboard also checks `killed`
+    // state which is only set by the /api/kill call itself. We send a status
+    // frame so the dashboard at least shows the connection dot correctly.
     ws.send(JSON.stringify({ type: 'connected', payload: { connected: true } }));
+    ws.send(JSON.stringify({
+      type: 'status',
+      payload: { connected: status.ready, killSwitch: status.killSwitch },
+    }));
     for (const e of bot.pending.values()) {
       ws.send(JSON.stringify({
         type: 'pending',
